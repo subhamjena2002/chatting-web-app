@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WiFi Audio Chat</title>
+</head>
+<body>
+  <h1>WiFi Audio Chat (AudioWorklet)</h1>
+  <button onclick="start()">Start Audio</button>
+
+  <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+
+    async function start() {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioContext = new AudioContext();
+
+      await audioContext.audioWorklet.addModule('/processor.js');
+
+      const source = audioContext.createMediaStreamSource(stream);
+      const workletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+
+      source.connect(workletNode);
+      workletNode.connect(audioContext.destination);
+
+      workletNode.port.onmessage = (event) => {
+        // Send Float32Array as Array (convert to normal array)
+        socket.emit('audio', Array.from(event.data));
+      };
+
+      socket.on('audio', (data) => {
+        const floatArray = new Float32Array(data);
+        const audioBuffer = audioContext.createBuffer(1, floatArray.length, audioContext.sampleRate);
+        audioBuffer.copyToChannel(floatArray, 0);
+
+        const playbackSource = audioContext.createBufferSource();
+        playbackSource.buffer = audioBuffer;
+        playbackSource.connect(audioContext.destination);
+        playbackSource.start();
+      });
+    }
+  </script>
+</body>
+</html>
